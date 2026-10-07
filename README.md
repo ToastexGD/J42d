@@ -25,7 +25,7 @@ Sits on top of [Hoolock Linux](https://github.com/HoolockLinux) (kernel, m1n1, i
 
 ## Build and boot
 
-Debian/Ubuntu host.
+Debian/Ubuntu host. On Windows boot an Ubuntu live USB, checkm8 through WSL is not reliable.
 
 ```
 scripts/setup-host.sh

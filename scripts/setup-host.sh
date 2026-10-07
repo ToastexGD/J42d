@@ -1,6 +1,10 @@
 #!/bin/sh
 set -eu
 
+if grep -q '^ID=ubuntu' /etc/os-release; then
+	sudo add-apt-repository -y universe
+fi
+
 sudo apt-get update
 sudo apt-get install -y build-essential git curl python3 flex bison bc \
 	libssl-dev libelf-dev device-tree-compiler clang lld xxd usbutils cpio \
