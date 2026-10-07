@@ -1,0 +1,69 @@
+From 98c7fb73ba9fc3bdd194047ff05f48847f2b73ab Mon Sep 17 00:00:00 2001
+From: ToastexGD <toastexgdm@gmail.com>
+Date: Wed, 7 Oct 2026 17:20:19 -0400
+Subject: [PATCH] arm64: dts: apple: j42d: Enable Ethernet
+
+---
+ arch/arm64/boot/dts/apple/t7000-j42d.dts | 32 ++++++++++++++++++++++++
+ 1 file changed, 32 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/apple/t7000-j42d.dts b/arch/arm64/boot/dts/apple/t7000-j42d.dts
+index b65d1d815..80109dbcd 100644
+--- a/arch/arm64/boot/dts/apple/t7000-j42d.dts
++++ b/arch/arm64/boot/dts/apple/t7000-j42d.dts
+@@ -8,12 +8,17 @@
+ 
+ #include "t7000.dtsi"
+ #include "t7000-common.dtsi"
++#include <dt-bindings/gpio/gpio.h>
+ 
+ / {
+ 	compatible = "apple,j42d", "apple,t7000", "apple,arm-platform";
+ 	model = "Apple TV HD";
+ 	chassis-type = "television";
+ 
++	aliases {
++		ethernet0 = &ethernet0;
++	};
++
+ 	chosen {
+ 		stdout-path = "serial6";
+ 
+@@ -44,6 +49,20 @@ pmic@74 {
+ 		#address-cells = <1>;
+ 		#size-cells = <1>;
+ 
++		pmic_gpio: gpio@400 {
++			compatible = "apple,adi-pmic-gpio";
++			reg = <0x400 0x2a>, <0x63 0x3>;
++			gpio-controller;
++			#gpio-cells = <2>;
++
++			lan-reset-hog {
++				gpio-hog;
++				gpios = <10 GPIO_ACTIVE_LOW>;
++				output-low;
++				line-name = "lan-reset";
++			};
++		};
++
+ 		rtc@5c0 {
+ 			compatible = "apple,adi-pmic-rtc", "apple,amber-pmic-rtc";
+ 			reg = <0x5c0 0x10>;
+@@ -67,3 +86,16 @@ rtc_offset: rtc-offset@4 {
+ 		};
+ 	};
+ };
++
++&hsicphy1 {
++	status = "okay";
++};
++
++&ehci2 {
++	status = "okay";
++
++	ethernet0: ethernet@1 {
++		compatible = "usb424,9730";
++		reg = <1>;
++	};
++};

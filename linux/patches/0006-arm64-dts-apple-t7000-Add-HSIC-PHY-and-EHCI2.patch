@@ -1,0 +1,45 @@
+From a9c4995c5451da9ec21ae8ad1c56232bd5582582 Mon Sep 17 00:00:00 2001
+From: ToastexGD <toastexgdm@gmail.com>
+Date: Wed, 7 Oct 2026 17:20:18 -0400
+Subject: [PATCH] arm64: dts: apple: t7000: Add HSIC PHY and EHCI2
+
+---
+ arch/arm64/boot/dts/apple/t7000.dtsi | 19 +++++++++++++++++--
+ 1 file changed, 17 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/apple/t7000.dtsi b/arch/arm64/boot/dts/apple/t7000.dtsi
+index 2ebdfaa2c..f08ab30da 100644
+--- a/arch/arm64/boot/dts/apple/t7000.dtsi
++++ b/arch/arm64/boot/dts/apple/t7000.dtsi
+@@ -253,14 +253,29 @@ ehci1: usb-ehci@20c400000 {
+ 				interrupts = <AIC_IRQ 185 IRQ_TYPE_LEVEL_HIGH>;
+ 				power-domains = <&ps_usb2host1>;
+ 			};
++#endif
++
++			hsicphy1: phy@20c000060 {
++				compatible = "apple,t7000-hsic-phy", "apple,hsic-phy";
++				reg = <0x2 0x0c000060 0x0 0x10>,
++				      <0x2 0x0c000018 0x0 0x8>;
++				reg-names = "hsic", "ehci";
++				power-domains = <&ps_hsic1_phy>;
++				#phy-cells = <0>;
++				status = "disabled";
++			};
+ 
+-			ehci2: usb-ehci@20c500000 {
++			ehci2: usb@20c500000 {
+ 				compatible = "apple,t7000-ehci", "generic-ehci";
+ 				reg = <0x2 0x0c500000 0x0 0x10000>;
+ 				interrupts = <AIC_IRQ 186 IRQ_TYPE_LEVEL_HIGH>;
+ 				power-domains = <&ps_usb2host2>;
++				phys = <&hsicphy1>;
++				phy-names = "usb";
++				#address-cells = <1>;
++				#size-cells = <0>;
++				status = "disabled";
+ 			};
+-#endif
+ 		};
+ 
+ 		pmgr: power-management@20e000000 {

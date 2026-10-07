@@ -1,0 +1,41 @@
+From ae510e060e9b07ca9a6769777af86c7c5498c3b5 Mon Sep 17 00:00:00 2001
+From: ToastexGD <toastexgdm@gmail.com>
+Date: Wed, 7 Oct 2026 17:28:21 -0400
+Subject: [PATCH] arm64: dts: apple: j42d: Add Bluetooth
+
+---
+ arch/arm64/boot/dts/apple/t7000-j42d.dts | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/apple/t7000-j42d.dts b/arch/arm64/boot/dts/apple/t7000-j42d.dts
+index 80109dbcd..543344a31 100644
+--- a/arch/arm64/boot/dts/apple/t7000-j42d.dts
++++ b/arch/arm64/boot/dts/apple/t7000-j42d.dts
+@@ -16,7 +16,9 @@ / {
+ 	chassis-type = "television";
+ 
+ 	aliases {
++		bluetooth0 = &bluetooth0;
+ 		ethernet0 = &ethernet0;
++		serial1 = &serial1;
+ 	};
+ 
+ 	chosen {
+@@ -32,6 +34,17 @@ framebuffer0: framebuffer@0 {
+ 	};
+ };
+ 
++&serial1 {
++	status = "okay";
++
++	bluetooth0: bluetooth {
++		compatible = "brcm,bcm4350-bt";
++		max-speed = <1500000>;
++		shutdown-gpios = <&pmic_gpio 2 GPIO_ACTIVE_HIGH>;
++		device-wakeup-gpios = <&pinctrl 48 GPIO_ACTIVE_HIGH>;
++	};
++};
++
+ &serial6 {
+ 	status = "okay";
+ };

@@ -1,0 +1,68 @@
+From b269435f495d349ddadebe83b8709928d8350fd7 Mon Sep 17 00:00:00 2001
+From: ToastexGD <toastexgdm@gmail.com>
+Date: Wed, 7 Oct 2026 17:28:18 -0400
+Subject: [PATCH] arm64: dts: apple: t7000: Add uart1-4
+
+---
+ arch/arm64/boot/dts/apple/t7000.dtsi | 48 ++++++++++++++++++++++++++++
+ 1 file changed, 48 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/apple/t7000.dtsi b/arch/arm64/boot/dts/apple/t7000.dtsi
+index f08ab30da..8400b8606 100644
+--- a/arch/arm64/boot/dts/apple/t7000.dtsi
++++ b/arch/arm64/boot/dts/apple/t7000.dtsi
+@@ -132,6 +132,54 @@ serial0: serial@20a0c0000 {
+ 			status = "disabled";
+ 		};
+ 
++		serial1: serial@20a0c4000 {
++			compatible = "apple,s5l-uart";
++			reg = <0x2 0x0a0c4000 0x0 0x4000>;
++			reg-io-width = <4>;
++			interrupt-parent = <&aic>;
++			interrupts = <AIC_IRQ 159 IRQ_TYPE_LEVEL_HIGH>;
++			clocks = <&clkref>, <&clkref>;
++			clock-names = "uart", "clk_uart_baud0";
++			power-domains = <&ps_uart1>;
++			status = "disabled";
++		};
++
++		serial2: serial@20a0c8000 {
++			compatible = "apple,s5l-uart";
++			reg = <0x2 0x0a0c8000 0x0 0x4000>;
++			reg-io-width = <4>;
++			interrupt-parent = <&aic>;
++			interrupts = <AIC_IRQ 160 IRQ_TYPE_LEVEL_HIGH>;
++			clocks = <&clkref>, <&clkref>;
++			clock-names = "uart", "clk_uart_baud0";
++			power-domains = <&ps_uart2>;
++			status = "disabled";
++		};
++
++		serial3: serial@20a0cc000 {
++			compatible = "apple,s5l-uart";
++			reg = <0x2 0x0a0cc000 0x0 0x4000>;
++			reg-io-width = <4>;
++			interrupt-parent = <&aic>;
++			interrupts = <AIC_IRQ 161 IRQ_TYPE_LEVEL_HIGH>;
++			clocks = <&clkref>, <&clkref>;
++			clock-names = "uart", "clk_uart_baud0";
++			power-domains = <&ps_uart3>;
++			status = "disabled";
++		};
++
++		serial4: serial@20a0d0000 {
++			compatible = "apple,s5l-uart";
++			reg = <0x2 0x0a0d0000 0x0 0x4000>;
++			reg-io-width = <4>;
++			interrupt-parent = <&aic>;
++			interrupts = <AIC_IRQ 162 IRQ_TYPE_LEVEL_HIGH>;
++			clocks = <&clkref>, <&clkref>;
++			clock-names = "uart", "clk_uart_baud0";
++			power-domains = <&ps_uart4>;
++			status = "disabled";
++		};
++
+ 		serial6: serial@20a0d8000 {
+ 			compatible = "apple,s5l-uart";
+ 			reg = <0x2 0x0a0d8000 0x0 0x4000>;

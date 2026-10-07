@@ -1,0 +1,181 @@
+From d7bf306a164905bd42e5541b40e41d8c95c4b1d5 Mon Sep 17 00:00:00 2001
+From: ToastexGD <toastexgdm@gmail.com>
+Date: Wed, 7 Oct 2026 17:20:17 -0400
+Subject: [PATCH] phy: apple: Add HSIC PHY driver
+
+Add a driver for the HSIC PHY found on Apple A7 and A8 SoCs. The Apple TV HD uses it to reach the onboard LAN9730 Ethernet controller over EHCI.
+---
+ drivers/phy/apple/Kconfig  |  11 ++++
+ drivers/phy/apple/Makefile |   3 +
+ drivers/phy/apple/hsic.c   | 132 +++++++++++++++++++++++++++++++++++++
+ 3 files changed, 146 insertions(+)
+ create mode 100644 drivers/phy/apple/hsic.c
+
+diff --git a/drivers/phy/apple/Kconfig b/drivers/phy/apple/Kconfig
+index 0f5245502..7b56d1fbd 100644
+--- a/drivers/phy/apple/Kconfig
++++ b/drivers/phy/apple/Kconfig
+@@ -25,3 +25,14 @@ config PHY_APPLE_AUSB
+ 	  This driver supports USB2.
+ 
+ 	  If M is selected the module will be called 'phy-apple-ausb'.
++
++config PHY_APPLE_HSIC
++	tristate "Apple HSIC PHY"
++	depends on (ARM64 && ARCH_APPLE) || COMPILE_TEST
++	select GENERIC_PHY
++	help
++	  Enable this to add support for the HSIC PHY found in Apple A7
++	  and A8 SoCs. On the Apple TV HD it connects the onboard
++	  LAN9730 Ethernet controller to EHCI.
++
++	  If M is selected the module will be called 'phy-apple-hsic'.
+diff --git a/drivers/phy/apple/Makefile b/drivers/phy/apple/Makefile
+index 6a52d5719..0944d61b9 100644
+--- a/drivers/phy/apple/Makefile
++++ b/drivers/phy/apple/Makefile
+@@ -5,3 +5,6 @@ phy-apple-atc-y			:= atc.o
+ 
+ obj-$(CONFIG_PHY_APPLE_AUSB)		+= phy-apple-ausb.o
+ phy-apple-ausb-y			:= ausb.o
++
++obj-$(CONFIG_PHY_APPLE_HSIC)		+= phy-apple-hsic.o
++phy-apple-hsic-y			:= hsic.o
+diff --git a/drivers/phy/apple/hsic.c b/drivers/phy/apple/hsic.c
+new file mode 100644
+index 000000000..1854f75cb
+--- /dev/null
++++ b/drivers/phy/apple/hsic.c
+@@ -0,0 +1,132 @@
++// SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause
++/*
++ * Apple HSIC PHY
++ *
++ * Copyright (C) 2026 ToastexGD
++ */
++
++#include <linux/bits.h>
++#include <linux/delay.h>
++#include <linux/io.h>
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/phy/phy.h>
++#include <linux/platform_device.h>
++
++#define APPLE_HSIC_CTL			0x00
++#define APPLE_HSIC_CTL_RESET		BIT(0)
++#define APPLE_HSIC_CTL_PWR		(BIT(1) | BIT(2) | BIT(5))
++#define APPLE_HSIC_CTL_OFF		(BIT(0) | BIT(1) | BIT(2))
++#define APPLE_HSIC_CFG			0x08
++
++#define APPLE_EHCI_CTL			0x00
++#define APPLE_EHCI_CTL_STOP		BIT(1)
++#define APPLE_EHCI_CFG			0x04
++#define APPLE_EHCI_CFG_INCR		GENMASK(3, 0)
++
++struct apple_hsic_phy {
++	struct device *dev;
++	struct phy *phy;
++	void __iomem *hsic;
++	void __iomem *ehci;
++	u32 cfg;
++	bool has_cfg;
++};
++
++static void apple_hsic_mask32(void __iomem *reg, u32 clear, u32 set)
++{
++	writel((readl(reg) & ~clear) | set, reg);
++}
++
++static int apple_hsic_phy_power_on(struct phy *phy)
++{
++	struct apple_hsic_phy *ap = phy_get_drvdata(phy);
++
++	if (ap->ehci) {
++		apple_hsic_mask32(ap->ehci + APPLE_EHCI_CFG, 0, APPLE_EHCI_CFG_INCR);
++		apple_hsic_mask32(ap->ehci + APPLE_EHCI_CTL, APPLE_EHCI_CTL_STOP, 0);
++	}
++
++	apple_hsic_mask32(ap->hsic + APPLE_HSIC_CTL, 0,
++			  APPLE_HSIC_CTL_RESET | BIT(1));
++	if (ap->has_cfg)
++		writel(ap->cfg, ap->hsic + APPLE_HSIC_CFG);
++	apple_hsic_mask32(ap->hsic + APPLE_HSIC_CTL, APPLE_HSIC_CTL_PWR, 0);
++	udelay(20);
++	apple_hsic_mask32(ap->hsic + APPLE_HSIC_CTL, APPLE_HSIC_CTL_RESET, 0);
++	usleep_range(1000, 2000);
++
++	return 0;
++}
++
++static int apple_hsic_phy_power_off(struct phy *phy)
++{
++	struct apple_hsic_phy *ap = phy_get_drvdata(phy);
++
++	apple_hsic_mask32(ap->hsic + APPLE_HSIC_CTL, 0, APPLE_HSIC_CTL_OFF);
++
++	if (ap->ehci)
++		apple_hsic_mask32(ap->ehci + APPLE_EHCI_CTL, 0, APPLE_EHCI_CTL_STOP);
++
++	return 0;
++}
++
++static const struct phy_ops apple_hsic_phy_ops = {
++	.owner = THIS_MODULE,
++	.power_on = apple_hsic_phy_power_on,
++	.power_off = apple_hsic_phy_power_off,
++};
++
++static int apple_hsic_phy_probe(struct platform_device *pdev)
++{
++	struct device *dev = &pdev->dev;
++	struct phy_provider *provider;
++	struct apple_hsic_phy *ap;
++
++	ap = devm_kzalloc(dev, sizeof(*ap), GFP_KERNEL);
++	if (!ap)
++		return -ENOMEM;
++
++	ap->dev = dev;
++
++	ap->hsic = devm_platform_ioremap_resource_byname(pdev, "hsic");
++	if (IS_ERR(ap->hsic))
++		return PTR_ERR(ap->hsic);
++
++	if (platform_get_resource_byname(pdev, IORESOURCE_MEM, "ehci")) {
++		ap->ehci = devm_platform_ioremap_resource_byname(pdev, "ehci");
++		if (IS_ERR(ap->ehci))
++			return PTR_ERR(ap->ehci);
++	}
++
++	ap->has_cfg = !of_property_read_u32(dev->of_node, "apple,cfg", &ap->cfg);
++
++	ap->phy = devm_phy_create(dev, NULL, &apple_hsic_phy_ops);
++	if (IS_ERR(ap->phy))
++		return PTR_ERR(ap->phy);
++
++	phy_set_drvdata(ap->phy, ap);
++
++	provider = devm_of_phy_provider_register(dev, of_phy_simple_xlate);
++
++	return PTR_ERR_OR_ZERO(provider);
++}
++
++static const struct of_device_id apple_hsic_phy_of_match[] = {
++	{ .compatible = "apple,hsic-phy" },
++	{}
++};
++MODULE_DEVICE_TABLE(of, apple_hsic_phy_of_match);
++
++static struct platform_driver apple_hsic_phy_driver = {
++	.probe = apple_hsic_phy_probe,
++	.driver = {
++		.name = "phy-apple-hsic",
++		.of_match_table = apple_hsic_phy_of_match,
++	},
++};
++module_platform_driver(apple_hsic_phy_driver);
++
++MODULE_AUTHOR("ToastexGD");
++MODULE_DESCRIPTION("Apple HSIC PHY driver");
++MODULE_LICENSE("Dual BSD/GPL");

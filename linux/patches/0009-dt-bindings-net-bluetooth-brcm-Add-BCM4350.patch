@@ -1,0 +1,21 @@
+From 34b3f8687da30e313409d7342833a5ced39b6ad3 Mon Sep 17 00:00:00 2001
+From: ToastexGD <toastexgdm@gmail.com>
+Date: Wed, 7 Oct 2026 17:28:19 -0400
+Subject: [PATCH] dt-bindings: net: bluetooth: brcm: Add BCM4350
+
+---
+ .../devicetree/bindings/net/bluetooth/brcm,bluetooth.yaml        | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/Documentation/devicetree/bindings/net/bluetooth/brcm,bluetooth.yaml b/Documentation/devicetree/bindings/net/bluetooth/brcm,bluetooth.yaml
+index 95501e858..06d08bc00 100644
+--- a/Documentation/devicetree/bindings/net/bluetooth/brcm,bluetooth.yaml
++++ b/Documentation/devicetree/bindings/net/bluetooth/brcm,bluetooth.yaml
+@@ -31,6 +31,7 @@ properties:
+           - brcm,bcm43540-bt
+           - brcm,bcm4335a0
+           - brcm,bcm4349-bt
++          - brcm,bcm4350-bt
+           - cypress,cyw4373a0-bt
+           - infineon,cyw55572-bt
+ 

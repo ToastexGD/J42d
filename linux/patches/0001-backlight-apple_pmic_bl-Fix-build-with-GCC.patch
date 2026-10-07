@@ -1,0 +1,23 @@
+From 637849c9332effa59a09835f93916c69da71a617 Mon Sep 17 00:00:00 2001
+From: ToastexGD <toastexgdm@gmail.com>
+Date: Wed, 7 Oct 2026 17:31:44 -0400
+Subject: [PATCH] backlight: apple_pmic_bl: Fix build with GCC
+
+apple_pmic_bl_get_brightness() can fall off the end of the switch, which GCC rejects with -Werror=return-type.
+---
+ drivers/video/backlight/apple_pmic_bl.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/drivers/video/backlight/apple_pmic_bl.c b/drivers/video/backlight/apple_pmic_bl.c
+index 64d472512..ae891a6e5 100644
+--- a/drivers/video/backlight/apple_pmic_bl.c
++++ b/drivers/video/backlight/apple_pmic_bl.c
+@@ -65,6 +65,8 @@ static int apple_pmic_bl_get_brightness(struct backlight_device *bl)
+ 		case PMIC_TYPE_ARIA:
+ 			return ((cmd[1] & 7) << 8) | (cmd[0] & 0xff);
+ 	}
++
++	return -EINVAL;
+ }
+ 
+ static const struct backlight_ops apple_pmic_bl_ops = {

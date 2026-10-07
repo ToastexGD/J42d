@@ -1,0 +1,225 @@
+From 10a3a2d2290d27818196a72502409ebadee41d7e Mon Sep 17 00:00:00 2001
+From: ToastexGD <toastexgdm@gmail.com>
+Date: Wed, 7 Oct 2026 17:20:16 -0400
+Subject: [PATCH] gpio: Add Apple PMIC GPIO driver
+
+Add a driver for the GPIOs on the Dialog D2186 based PMIC used on Apple A8 devices. Each pin has a config byte at 0x400 + 2 * n, input levels are read from a status bank.
+---
+ drivers/gpio/Kconfig           |  12 +++
+ drivers/gpio/Makefile          |   1 +
+ drivers/gpio/gpio-apple-pmic.c | 171 +++++++++++++++++++++++++++++++++
+ 3 files changed, 184 insertions(+)
+ create mode 100644 drivers/gpio/gpio-apple-pmic.c
+
+diff --git a/drivers/gpio/Kconfig b/drivers/gpio/Kconfig
+index a48586bb8..f50be6aa2 100644
+--- a/drivers/gpio/Kconfig
++++ b/drivers/gpio/Kconfig
+@@ -1348,6 +1348,18 @@ config GPIO_ALTERA_A10SR
+ 	  includes reads of pushbuttons and DIP switches as well
+ 	  as writes to LEDs.
+ 
++config GPIO_APPLE_PMIC
++	tristate "Apple PMIC GPIO"
++	depends on ARCH_APPLE || COMPILE_TEST
++	depends on OF
++	select MFD_SIMPLE_MFD_I2C
++	help
++	  Support for the GPIOs on the Dialog designed PMICs found in
++	  Apple A8 based devices such as the Apple TV HD.
++
++	  This driver can also be built as a module. If so, the module will be
++	  called gpio-apple-pmic.
++
+ config GPIO_ARIZONA
+ 	tristate "Wolfson Microelectronics Arizona class devices"
+ 	depends on MFD_ARIZONA
+diff --git a/drivers/gpio/Makefile b/drivers/gpio/Makefile
+index dc9e6d643..29d5473bb 100644
+--- a/drivers/gpio/Makefile
++++ b/drivers/gpio/Makefile
+@@ -36,6 +36,7 @@ obj-$(CONFIG_GPIO_ALTERA)  		+= gpio-altera.o
+ obj-$(CONFIG_GPIO_AMD8111)		+= gpio-amd8111.o
+ obj-$(CONFIG_GPIO_AMD_FCH)		+= gpio-amd-fch.o
+ obj-$(CONFIG_GPIO_AMDPT)		+= gpio-amdpt.o
++obj-$(CONFIG_GPIO_APPLE_PMIC)		+= gpio-apple-pmic.o
+ obj-$(CONFIG_GPIO_ARIZONA)		+= gpio-arizona.o
+ obj-$(CONFIG_GPIO_ASPEED)		+= gpio-aspeed.o
+ obj-$(CONFIG_GPIO_ASPEED_SGPIO)		+= gpio-aspeed-sgpio.o
+diff --git a/drivers/gpio/gpio-apple-pmic.c b/drivers/gpio/gpio-apple-pmic.c
+new file mode 100644
+index 000000000..105374243
+--- /dev/null
++++ b/drivers/gpio/gpio-apple-pmic.c
+@@ -0,0 +1,171 @@
++// SPDX-License-Identifier: GPL-2.0-only OR MIT
++/*
++ * Apple PMIC GPIO driver
++ *
++ * Copyright (C) 2026 ToastexGD
++ */
++
++#include <linux/bits.h>
++#include <linux/gpio/driver.h>
++#include <linux/mod_devicetable.h>
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/platform_device.h>
++#include <linux/property.h>
++#include <linux/regmap.h>
++
++#define APPLE_PMIC_GPIO_CFG_VALUE	BIT(1)
++#define APPLE_PMIC_GPIO_CFG_INPUT	BIT(7)
++#define APPLE_PMIC_GPIO_CFG_FUNC_MASK	GENMASK(7, 3)
++
++struct apple_pmic_gpio_hw {
++	u32 cfg_stride;
++	u16 ngpio;
++};
++
++struct apple_pmic_gpio {
++	struct gpio_chip chip;
++	struct regmap *regmap;
++	const struct apple_pmic_gpio_hw *hw;
++	u32 cfg_base;
++	u32 status_base;
++};
++
++static unsigned int apple_pmic_gpio_cfg(struct apple_pmic_gpio *pg,
++					unsigned int offset)
++{
++	return pg->cfg_base + offset * pg->hw->cfg_stride;
++}
++
++static int apple_pmic_gpio_get_direction(struct gpio_chip *chip,
++					 unsigned int offset)
++{
++	struct apple_pmic_gpio *pg = gpiochip_get_data(chip);
++	unsigned int val;
++	int ret;
++
++	ret = regmap_read(pg->regmap, apple_pmic_gpio_cfg(pg, offset), &val);
++	if (ret)
++		return ret;
++
++	if (val & APPLE_PMIC_GPIO_CFG_INPUT)
++		return GPIO_LINE_DIRECTION_IN;
++
++	return GPIO_LINE_DIRECTION_OUT;
++}
++
++static int apple_pmic_gpio_direction_input(struct gpio_chip *chip,
++					   unsigned int offset)
++{
++	struct apple_pmic_gpio *pg = gpiochip_get_data(chip);
++
++	return regmap_update_bits(pg->regmap, apple_pmic_gpio_cfg(pg, offset),
++				  APPLE_PMIC_GPIO_CFG_FUNC_MASK,
++				  APPLE_PMIC_GPIO_CFG_INPUT);
++}
++
++static int apple_pmic_gpio_direction_output(struct gpio_chip *chip,
++					    unsigned int offset, int value)
++{
++	struct apple_pmic_gpio *pg = gpiochip_get_data(chip);
++
++	return regmap_update_bits(pg->regmap, apple_pmic_gpio_cfg(pg, offset),
++				  APPLE_PMIC_GPIO_CFG_FUNC_MASK |
++				  APPLE_PMIC_GPIO_CFG_VALUE,
++				  value ? APPLE_PMIC_GPIO_CFG_VALUE : 0);
++}
++
++static int apple_pmic_gpio_set(struct gpio_chip *chip, unsigned int offset,
++			       int value)
++{
++	struct apple_pmic_gpio *pg = gpiochip_get_data(chip);
++
++	return regmap_update_bits(pg->regmap, apple_pmic_gpio_cfg(pg, offset),
++				  APPLE_PMIC_GPIO_CFG_VALUE,
++				  value ? APPLE_PMIC_GPIO_CFG_VALUE : 0);
++}
++
++static int apple_pmic_gpio_get(struct gpio_chip *chip, unsigned int offset)
++{
++	struct apple_pmic_gpio *pg = gpiochip_get_data(chip);
++	unsigned int cfg, status;
++	int ret;
++
++	ret = regmap_read(pg->regmap, apple_pmic_gpio_cfg(pg, offset), &cfg);
++	if (ret)
++		return ret;
++
++	if (!(cfg & APPLE_PMIC_GPIO_CFG_INPUT))
++		return !!(cfg & APPLE_PMIC_GPIO_CFG_VALUE);
++
++	ret = regmap_read(pg->regmap, pg->status_base + offset / 8, &status);
++	if (ret)
++		return ret;
++
++	return !!(status & BIT(offset % 8));
++}
++
++static int apple_pmic_gpio_probe(struct platform_device *pdev)
++{
++	struct device *dev = &pdev->dev;
++	struct apple_pmic_gpio *pg;
++	int ret;
++
++	pg = devm_kzalloc(dev, sizeof(*pg), GFP_KERNEL);
++	if (!pg)
++		return -ENOMEM;
++
++	pg->hw = device_get_match_data(dev);
++	if (!pg->hw)
++		return -ENODEV;
++
++	pg->regmap = dev_get_regmap(dev->parent, NULL);
++	if (!pg->regmap)
++		return dev_err_probe(dev, -ENODEV, "no parent regmap\n");
++
++	ret = of_property_read_u32_index(dev->of_node, "reg", 0, &pg->cfg_base);
++	if (ret)
++		return dev_err_probe(dev, ret, "missing config registers\n");
++
++	ret = of_property_read_u32_index(dev->of_node, "reg", 2, &pg->status_base);
++	if (ret)
++		return dev_err_probe(dev, ret, "missing status registers\n");
++
++	pg->chip.label = dev_name(dev);
++	pg->chip.parent = dev;
++	pg->chip.owner = THIS_MODULE;
++	pg->chip.base = -1;
++	pg->chip.ngpio = pg->hw->ngpio;
++	pg->chip.can_sleep = true;
++	pg->chip.get_direction = apple_pmic_gpio_get_direction;
++	pg->chip.direction_input = apple_pmic_gpio_direction_input;
++	pg->chip.direction_output = apple_pmic_gpio_direction_output;
++	pg->chip.get = apple_pmic_gpio_get;
++	pg->chip.set = apple_pmic_gpio_set;
++
++	return devm_gpiochip_add_data(dev, &pg->chip, pg);
++}
++
++static const struct apple_pmic_gpio_hw apple_adi_pmic_gpio_hw = {
++	.cfg_stride = 2,
++	.ngpio = 21,
++};
++
++static const struct of_device_id apple_pmic_gpio_of_match[] = {
++	{ .compatible = "apple,adi-pmic-gpio", .data = &apple_adi_pmic_gpio_hw },
++	{}
++};
++MODULE_DEVICE_TABLE(of, apple_pmic_gpio_of_match);
++
++static struct platform_driver apple_pmic_gpio_driver = {
++	.probe = apple_pmic_gpio_probe,
++	.driver = {
++		.name = "apple-pmic-gpio",
++		.of_match_table = apple_pmic_gpio_of_match,
++	},
++};
++module_platform_driver(apple_pmic_gpio_driver);
++
++MODULE_AUTHOR("ToastexGD");
++MODULE_DESCRIPTION("Apple PMIC GPIO driver");
++MODULE_LICENSE("Dual MIT/GPL");
