@@ -9,7 +9,7 @@ mode=${1:-iboot}
 case $mode in
 iboot)
 	rb=$out/remote_boot
-	[ -d "$rb" ] || git clone --recursive https://github.com/HoolockLinux/remote_boot "$rb"
+	[ -d "$rb" ] || git -c url.https://github.com/.insteadOf=git@github.com: clone --recursive https://github.com/HoolockLinux/remote_boot "$rb"
 	cd "$rb"
 	./remoteboot.sh build
 	ls cache/RestoreDeviceTree_*AppleTV5,3.img4 >/dev/null 2>&1 || sudo ./remoteboot.sh prep
