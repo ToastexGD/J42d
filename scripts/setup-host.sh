@@ -8,7 +8,7 @@ fi
 sudo apt-get update
 sudo apt-get install -y build-essential git curl python3 flex bison bc \
 	libssl-dev libelf-dev device-tree-compiler clang lld xxd usbutils cpio \
-	libusb-1.0-0-dev irecovery libirecovery-1.0-dev
+	libusb-1.0-0-dev irecovery libirecovery-1.0-dev telnet picocom
 
 if ! command -v ipsw >/dev/null; then
 	case $(uname -m) in
